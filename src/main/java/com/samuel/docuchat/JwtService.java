@@ -35,4 +35,10 @@ public class JwtService {
             .parseSignedClaims(token)
             .getPayload();
     }
+
+    public UUID extractOrgId(String token) {
+        String raw = token.startsWith("Bearer ") ? token.substring(7) : token;
+        io.jsonwebtoken.Claims claims = parseToken(raw);
+        return UUID.fromString(claims.get("orgId", String.class));
+    }
 }
