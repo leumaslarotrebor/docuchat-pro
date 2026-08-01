@@ -17,12 +17,25 @@ public class DocumentController {
 
     private final DocumentRepository documentRepository;
     private final OrgRepository orgRepository;
+    private final DocumentChunkRepository documentChunkRepository;
     private final JwtService jwtService;
+    private final ChunkingService chunkingService;
+    private final EmbeddingService embeddingService;
 
-    public DocumentController(DocumentRepository documentRepository, OrgRepository orgRepository, JwtService jwtService) {
+    public DocumentController(
+            DocumentRepository documentRepository,
+            OrgRepository orgRepository,
+            DocumentChunkRepository documentChunkRepository,
+            JwtService jwtService,
+            ChunkingService chunkingService,
+            EmbeddingService embeddingService
+    ) {
         this.documentRepository = documentRepository;
         this.orgRepository = orgRepository;
+        this.documentChunkRepository = documentChunkRepository;
         this.jwtService = jwtService;
+        this.chunkingService = chunkingService;
+        this.embeddingService = embeddingService;
     }
 
     @PostMapping("/upload")
@@ -51,8 +64,22 @@ public class DocumentController {
 
         Document doc = new Document(file.getOriginalFilename(), orgOpt.get());
         doc.setContent(content);
-        doc.setStatus(Document.Status.PENDING);
+        doc.setStatus(Document.Status.PROCESSING);
         Document saved = documentRepository.save(doc);
+
+        try {
+            List<String> chunks = chunkingService.chunk(content);
+            for (String chunkText : chunks) {
+                String embedding = embeddingService.embedAsString(chunkText);
+                DocumentChunk chunk = new DocumentChunk(chunkText, saved);
+                chunk.setEmbedding(embedding);
+                documentChunkRepository.save(chunk);
+            }
+            saved.setStatus(Document.Status.READY);
+        } catch (Exception e) {
+            saved.setStatus(Document.Status.FAILED);
+        }
+        documentRepository.save(saved);
 
         return ResponseEntity.ok(toDto(saved));
     }
